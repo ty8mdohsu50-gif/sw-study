@@ -37,11 +37,6 @@ if ('serviceWorker' in navigator) {
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <script>
-// ============================================================
-// Firebase Configuration
-// ============================================================
-// ★★★ ここにあなたのFirebase設定を貼り付けてください ★★★
-// Firebase Console → プロジェクト設定 → 全般 → マイアプリ → SDK構成
 const firebaseConfig = {
   apiKey: "AIzaSyCguWVjmLibZ-3fbBE53TYlBSTZqDxdZTs",
   authDomain: "sw-study-hub.firebaseapp.com",
@@ -51,7 +46,6 @@ const firebaseConfig = {
   appId: "1:990886138251:web:78faf07745e39a13c65f8e"
 };
 
-// Initialize Firebase (only if config is set)
 try {
   if (firebaseConfig.apiKey !== "YOUR_API_KEY") {
     const app = firebase.initializeApp(firebaseConfig);
@@ -60,15 +54,13 @@ try {
     window._fbAuth = auth;
     window._fbDb = db;
     window._fbGoogleProvider = firebase.auth.GoogleAuthProvider;
-    window._fbSignInWithPopup = (auth, provider) => auth.signInWithPopup(provider);
     window._fbSignOut = (auth) => auth.signOut();
-    window._fbOnAuthStateChanged = (auth, cb) => auth.onAuthStateChanged(cb);
     window._fbDoc = (db, collection, id) => db.collection(collection).doc(id);
     window._fbSetDoc = (ref, data, opts) => ref.set(data, opts);
     window._fbGetDoc = (ref) => ref.get().then(snap => ({ exists: () => snap.exists, data: () => snap.data() }));
-    console.log("Firebase initialized");
+    console.log("Firebase initialized successfully");
   } else {
-    console.log("Firebase not configured - using local storage only");
+    console.log("Firebase not configured - local storage only");
   }
 } catch (e) {
   console.error("Firebase init error:", e);
@@ -4120,19 +4112,20 @@ function SocialWorkerHub() {
     return null;
   }, [getFirestore]);
 
-  // Google Sign In
+  // Google Sign In (redirect for mobile compatibility)
   const handleSignIn = useCallback(async () => {
     const auth = getAuth();
     if (!auth) {
-      alert("Firebase未設定です。READMEの手順でfirebaseConfig を設定してください。");
+      alert("Firebase未設定です。");
       return;
     }
     try {
       const provider = new window._fbGoogleProvider();
-      const result = await window._fbSignInWithPopup(auth, provider);
-      setFireUser(result.user);
+      // Use redirect for mobile compatibility (popup is often blocked)
+      window._fbAuth.signInWithRedirect(provider);
     } catch (e) {
       console.error("Sign in error:", e);
+      alert("ログインエラー: " + e.message);
     }
   }, [getAuth]);
   const handleSignOut = useCallback(async () => {
@@ -4144,11 +4137,20 @@ function SocialWorkerHub() {
     setSyncStatus("");
   }, [getAuth]);
 
-  // Listen for auth state changes
+  // Listen for auth state changes + handle redirect result
   useEffect(() => {
     const auth = getAuth();
     if (!auth) return;
-    const unsub = window._fbOnAuthStateChanged(auth, user => {
+    // Handle redirect result (after Google sign-in redirect returns)
+    auth.getRedirectResult().then(result => {
+      if (result && result.user) {
+        console.log("Redirect sign-in success:", result.user.email);
+        setFireUser(result.user);
+      }
+    }).catch(e => {
+      console.error("Redirect result error:", e);
+    });
+    const unsub = auth.onAuthStateChanged(user => {
       setFireUser(user);
     });
     return () => unsub();
